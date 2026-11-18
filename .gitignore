@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+coverage/
+test-results/
+playwright-report/
+database/runtime-data/*
+!database/runtime-data/.gitkeep
+.agent-tmp/
+*.log

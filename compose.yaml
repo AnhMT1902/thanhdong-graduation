@@ -1,0 +1,51 @@
+services:
+  database:
+    image: postgres:16-alpine
+    stop_grace_period: 2m
+    environment:
+      POSTGRES_DB: quizify
+      POSTGRES_USER: quizify
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-quizify_demo_only}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./database/runtime-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'PGPASSWORD="$$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT 1" >/dev/null']
+      start_period: 5m
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    restart: unless-stopped
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://quizify:${DB_PASSWORD:-quizify_demo_only}@database:5432/quizify
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8094}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo12345!}
+      NODE_ENV: production
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 20
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    environment:
+      API_INTERNAL_URL: http://backend:4000
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:${APP_PORT:-8094}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:3000/user-login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
