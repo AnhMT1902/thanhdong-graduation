@@ -4,14 +4,31 @@ Website kiểm tra trắc nghiệm lớp học với Next.js, Express và Postgr
 
 ## Chạy trên Docker Desktop for Windows
 
-Mở Docker Desktop, dùng Linux containers. Trong PowerShell tại thư mục project:
+Bản bàn giao dành cho máy đã cài Docker Desktop và Docker Compose, bật ảo hóa/WSL 2 theo yêu cầu của Docker Desktop và dùng Linux containers. Không cần cài Node.js, npm, PostgreSQL hoặc Git trên Windows.
+
+1. Giải nén toàn bộ ZIP vào thư mục riêng; không chạy trực tiếp trong ZIP.
+2. Mở Docker Desktop và đợi Docker Engine sẵn sàng.
+3. Mở PowerShell tại thư mục chứa `compose.yaml`, kiểm tra Docker:
 
 ```powershell
-docker compose up --build -d
+docker version
+docker compose version
+```
+
+4. Tạo `.env` từ file mẫu nếu chưa có, không ghi đè cấu hình đang dùng:
+
+```powershell
+if (-not (Test-Path -LiteralPath .env)) { Copy-Item -LiteralPath .env.example -Destination .env }
+```
+
+5. Build và chạy ứng dụng; lần đầu cần mạng để tải image/dependency, có thể mất vài phút:
+
+```powershell
+docker compose up --build -d --wait
 docker compose ps
 ```
 
-Mở http://localhost:8094/user-login hoặc http://localhost:8094/admin-login. Backend và database chỉ nằm trong mạng Docker. Migration và seed demo chạy tự động lần đầu; khởi động lại không reset dữ liệu.
+6. Khi cả ba service `database`, `backend`, `frontend` đều `healthy`, mở http://localhost:8094/user-login hoặc http://localhost:8094/admin-login. Kiểm tra API bằng `Invoke-RestMethod http://localhost:8094/api/health`, kết quả có `status: ok`. Backend và database chỉ nằm trong mạng Docker. Migration và seed demo chạy tự động lần đầu; khởi động lại không reset dữ liệu.
 
 Cũng có thể mở `http://127.0.0.1:8094/user-login` hoặc `http://127.0.0.1:8094/admin-login`. Khi `PUBLIC_ORIGIN` dùng `localhost` hoặc `127.0.0.1`, backend cho phép cả hai hostname trên đúng giao thức và cổng cấu hình; vẫn chặn origin khác/sai cổng và request ghi thiếu header CSRF. Phiên đăng nhập riêng theo địa chỉ; khi đổi hostname có thể cần đăng nhập lại.
 
@@ -23,6 +40,8 @@ Cũng có thể mở `http://127.0.0.1:8094/user-login` hoặc `http://127.0.0.1
 | Học sinh lớp Demo B | HS003 hoặc hs03@quizify.test | Demo12345! |
 
 Tất cả tên/tài khoản là dữ liệu giả lập; không sử dụng thông tin thật. HS003 ban đầu chưa được giao bài, dùng demo giới hạn truy cập. Demo có hạn giao bài 30 ngày từ lúc seed; giáo viên tạo giao bài mới khi hết hạn.
+
+Ngay trên màn đăng nhập có khối **Tài khoản demo**: Admin hiển thị tài khoản giáo viên, Học sinh hiển thị cả ba tài khoản học sinh. Bấm **Điền** để điền tài khoản và mật khẩu mặc định, sau đó bấm **Đăng nhập**. Đây không phải chức năng tạo tài khoản hay bỏ qua xác thực. Mật khẩu có chữ `D` hoa, dấu `!` cuối và không có khoảng trắng. Nếu đã đổi mật khẩu, hãy nhập mật khẩu đã đổi thay cho giá trị được điền sẵn.
 
 Muốn đổi cổng/biến cấu hình, copy .env.example thành .env và chỉnh APP_PORT cùng PUBLIC_ORIGIN cho khớp URL trình duyệt. Các mật khẩu mặc định chỉ phục vụ demo local; không dùng nguyên cấu hình này cho server công cộng. COOKIE_SECURE=true chỉ khi thực sự chạy qua HTTPS. DEMO_PASSWORD chỉ có tác dụng ở lần seed đầu.
 
@@ -44,35 +63,35 @@ docker compose down
 docker compose up -d
 ```
 
-Database bind mount tại `database/runtime-data`, dữ liệu PostgreSQL nằm trong thư mục con `pgdata`, giữ nguyên khi down/up hoặc tạo lại container. Không xóa thư mục này nếu muốn giữ dữ liệu. Xem `docs/07-deployment-guide.md` để backup/restore/reset có xác nhận. Source và seed không chứa dữ liệu runtime.
+Database bind mount tại `database/runtime-data`, dữ liệu PostgreSQL nằm trong thư mục con `pgdata`, giữ nguyên khi down/up hoặc tạo lại container. Không xóa thư mục này nếu muốn giữ dữ liệu. ZIP không kèm database đang sử dụng; chạy bản giải nén mới sẽ tạo dữ liệu demo độc lập. Compose cho PostgreSQL tối đa 2 phút để dừng an toàn khi ổ bind mount trên Windows ghi chậm; đợi lệnh dừng hoàn tất, không tắt cưỡng bức Docker Desktop.
 
-## Kiểm thử
+### Sao lưu và khôi phục dữ liệu
 
-```powershell
-docker compose --profile test run --build --rm tests
-```
-
-Tests dùng database-test riêng trên tmpfs, không ghi/xóa database ứng dụng. Sau khi chạy, dừng database-test nếu không dùng: docker compose --profile test stop database-test.
-
-Kiểm thử giao diện Chromium bằng Docker, không cần cài trình duyệt/Node trên máy:
+Chạy trong thư mục project. File sao lưu chứa dữ liệu đang dùng, cần giữ riêng và không gửi kèm source:
 
 ```powershell
-docker compose up --build -d --wait
-docker compose --profile e2e run --no-deps --build --rm browser-tests
+docker compose exec -T database pg_dump -U quizify -d quizify -Fc -f /tmp/quizify-backup.dump
+docker compose cp database:/tmp/quizify-backup.dump ./quizify-backup.dump
 ```
 
-E2E tạo dữ liệu QA giả lập trong ứng dụng; cuối test vô hiệu hóa học sinh QA và lưu trữ đề QA, không xóa lịch sử. Nên chạy trên database demo hoặc bản sao độc lập. Ảnh và JSON kết quả ở `.agent-tmp/browser-tests/`. Bộ chạy E2E yêu cầu PUBLIC_ORIGIN dạng HTTP localhost hoặc 127.0.0.1 đúng APP_PORT; có kịch bản đăng nhập/đăng xuất qua cả hai địa chỉ.
+Chỉ khôi phục khi đã sao lưu dữ liệu hiện tại và xác nhận thay thế dữ liệu trong database đích. Dừng ứng dụng trong lúc khôi phục:
 
-## Hồ sơ kỹ thuật
+```powershell
+docker compose stop frontend backend
+docker compose cp ./quizify-backup.dump database:/tmp/quizify-backup.dump
+docker compose exec -T database pg_restore -U quizify -d quizify --clean --if-exists --no-owner /tmp/quizify-backup.dump
+docker compose up -d --wait
+```
 
-`docs/02-architecture.md`, `docs/03-api.md`, `docs/04-database-design.md`, `database/design/schema.dbml`, `docs/test-plan.md`, `docs/06-qa-report.md`, `docs/07-deployment-guide.md` và `docs/08-user-guide.md`. Không yêu cầu Git hoặc CI/CD để vận hành.
+## Xử lý lỗi khi chạy Docker
 
-## Chạy nhanh trên Windows bằng hai file BAT
+- Không kết nối được Docker Engine: mở Docker Desktop, đợi sẵn sàng và kiểm tra đang dùng Linux containers.
+- Trùng cổng 8094: sửa đồng thời `APP_PORT` và `PUBLIC_ORIGIN` trong `.env`, ví dụ `APP_PORT=18094`, `PUBLIC_ORIGIN=http://localhost:18094`, sau đó chạy lại `docker compose up --build -d --wait` và mở đúng cổng mới. Không xóa database.
+- Build/container lỗi: chạy `docker compose ps` và `docker compose logs --tail 100 backend frontend database` để xem nguyên nhân; kiểm tra mạng nếu chưa tải được image/dependency.
+- Lần khởi tạo PostgreSQL đầu tiên trên ổ Windows có thể cần vài phút để ghi dữ liệu. Healthcheck có giai đoạn khởi tạo 5 phút và vẫn chỉ báo sẵn sàng sau khi truy vấn database thành công; không tắt Docker khi database đang khởi tạo/phục hồi.
+- Đăng nhập sai: dùng đúng trang theo vai trò, bấm Điền hoặc nhập tài khoản trong bảng; xóa giá trị trình duyệt tự điền nếu là mật khẩu cũ. `DEMO_PASSWORD` không đổi mật khẩu của tài khoản đã có. Đăng nhập sai quá nhiều lần cần đợi 15 phút.
+- Không chép database/runtime-data giữa các bản source khi PostgreSQL còn chạy; dùng sao lưu/khôi phục nếu cần chuyển dữ liệu.
 
-1. Giải nén toàn bộ source vào thư mục riêng, không chạy trực tiếp bên trong ZIP.
-2. Double-click `01-cai-moi-truong.bat` để kiểm tra Windows/WSL 2/Docker Desktop; chỉ chuẩn bị thành phần còn thiếu khi bạn đồng ý. Không tự nâng/hạ Docker hoặc tự khởi động lại Windows.
-3. Double-click `02-chay-project.bat` để build, khởi động và mở ứng dụng khi container cùng HTTP đã sẵn sàng. Không cần cài ngôn ngữ lập trình/database/Git trên Windows.
+## Tùy chọn mở nhanh trên Windows
 
-Lần đầu tải image/build có thể lâu hơn 5 phút; không giới hạn tổng thời gian chờ. Ctrl+C để hủy. Script giữ nguyên `.env` và dữ liệu hiện có; chỉ tạo `.env` từ `.env.example` khi chưa có. Nếu cần đổi cổng, sửa `.env` theo hướng dẫn cấu hình của project, không xóa database. Trùng cổng sẽ báo lỗi, không tự đổi cổng. Giữ đầy đủ thư mục `scripts/windows/` đi kèm; không chỉ chép hai BAT riêng lẻ.
-
-Windows cũ có nhánh tương thích Docker cũ được kiểm chứng và cảnh báo rủi ro; không bảo đảm mọi thiết bị đều chạy được. ARM64/32-bit/Windows Server và máy thiếu ảo hóa cần xử lý riêng. Nếu PowerShell chặn script hoặc file tải về bị khóa, liên hệ người hỗ trợ theo chính sách máy; BAT không tự bỏ qua/chỉnh ExecutionPolicy. Mã lỗi: 10 không tương thích, 20 cần chuẩn bị/hủy, 30 chưa xác minh, 40 lỗi ứng dụng, 3010 cần restart thủ công rồi chạy lại file 01.
+Nếu Docker Desktop đã sẵn sàng, có thể dùng `start.bat`. File chạy trực tiếp `docker compose up --build -d --wait` và `docker compose ps` tại thư mục của nó; chỉ tạo `.env` từ `.env.example` nếu chưa có. Khi các service healthy, mở địa chỉ ứng dụng đã cấu hình. Nếu lệnh Docker thất bại, cửa sổ giữ lại thông báo lỗi; cấu hình và dữ liệu hiện có không bị ghi đè.
