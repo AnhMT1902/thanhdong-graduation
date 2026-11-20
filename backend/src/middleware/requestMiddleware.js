@@ -6,7 +6,12 @@ export function apiRequestGuard(request, response, next) {
   response.set('Cache-Control', 'no-store');
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
     const origin = request.get('Origin');
-    if (request.get('X-Requested-With') !== 'Quizify' || origin && !trustedOrigins.has(origin)) return next(new HttpError(403, 'Yêu cầu không hợp lệ hoặc khác nguồn'));
+    const isLoginForm = request.method === 'POST'
+      && /^\/auth\/(?:user|admin)\/login$/.test(request.path)
+      && request.is('application/x-www-form-urlencoded')
+      && origin
+      && trustedOrigins.has(origin);
+    if (request.get('X-Requested-With') !== 'Quizify' && !isLoginForm || origin && !trustedOrigins.has(origin)) return next(new HttpError(403, 'Yêu cầu không hợp lệ hoặc khác nguồn'));
   }
   next();
 }

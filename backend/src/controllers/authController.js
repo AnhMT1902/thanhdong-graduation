@@ -6,6 +6,9 @@ async function loginAs(role, request, response) {
   const value = parse(loginSchema, request.body);
   const result = await login({ identifier: value.identifier.toLowerCase(), password: value.password, role, ip: request.ip, currentToken: request.cookies.quizify_session });
   response.cookie('quizify_session', result.token, { ...cookieOptions, maxAge: sessionMaxAge });
+  if (request.is('application/x-www-form-urlencoded') && request.accepts('html') && request.get('X-Requested-With') !== 'Quizify') {
+    return response.redirect(303, role === 'admin' ? '/admin/dashboard' : '/user/dashboard');
+  }
   response.json(result.user);
 }
 

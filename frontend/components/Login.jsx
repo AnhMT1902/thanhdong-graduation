@@ -33,7 +33,7 @@ export default function Login({ role }) {
     finally { setBusy(false); }
   }
   return <main className="auth-page"><section className="auth-card"><div className="auth-logo"><img src="/logo.svg" alt="Quizify" width={48} height={48} /></div><h1 className="auth-title">Quizify</h1><h2 className="auth-subtitle">{isAdmin ? 'Đăng nhập Admin' : 'Đăng nhập học sinh'}</h2>
-    <form ref={formRef} className="stack" onSubmit={submit}>
+    <form ref={formRef} className="stack" method="post" action={`/api/auth/${isAdmin ? 'admin' : 'user'}/login`} onSubmit={submit}>
       <Field label={isAdmin ? 'Email' : 'Email hoặc mã học sinh'}><input className="input" name="identifier" required maxLength={200} autoComplete="username" spellCheck={false} autoCapitalize="none" /></Field>
       <Field label="Mật khẩu"><input className="input" name="password" type="password" required maxLength={128} autoComplete="current-password" /></Field>
       {error && <p role="alert" className="error-text">{error}</p>}
